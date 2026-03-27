@@ -42,7 +42,7 @@ jobs:
           do
             echo "Checking $REPO"
             RESPONSE=$(curl --fail -L \
-              -H "Accept: application/vnd.github.object" \
+              -H "Accept: application/vnd.github.raw+json" \
               -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
               -H "X-GitHub-Api-Version: 2026-03-10" \
               https://api.github.com/repos/$REPO/contents/.config/upstream.yml || echo "")
@@ -51,8 +51,6 @@ jobs:
               echo "$REPO: No upstream config"
               continue;
             fi
-
-            echo $RESPONSE
 
             echo $RESPONSE | yq -r '.[]|[.url, .branch] | @tsv' | while IFS=$'\t' read -r ORIGIN_URL ORIGIN_BRANCH; do
               if [[ $ORIGIN_URL != https://github.com/xdev-software/* ]]; then
