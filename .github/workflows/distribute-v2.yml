@@ -52,17 +52,18 @@ jobs:
               continue;
             fi
 
-            echo $RESPONSE | yq -r '.[]|[.url, .branch] | @tsv' |
-              while IFS=$'\t' read -r ORIGIN_URL ORIGIN_BRANCH; do
-                if [[ $ORIGIN_URL != https://github.com/xdev-software/* ]]; then
-                  echo "$REPO: Ignoring invalid upstream: $ORIGIN_URL"
-                  continue;
-                fi
+            echo $RESPONSE
 
-                echo "- target: $REPO" >> parameters.yml
-                echo "  origin_url: '$ORIGIN_URL'" >> parameters.yml
-                echo "  origin_branch: $ORIGIN_BRANCH" >> parameters.yml
-              done
+            echo $RESPONSE | yq -r '.[]|[.url, .branch] | @tsv' | while IFS=$'\t' read -r ORIGIN_URL ORIGIN_BRANCH; do
+              if [[ $ORIGIN_URL != https://github.com/xdev-software/* ]]; then
+                echo "$REPO: Ignoring invalid upstream: $ORIGIN_URL"
+                continue;
+              fi
+
+              echo "- target: $REPO" >> parameters.yml
+              echo "  origin_url: '$ORIGIN_URL'" >> parameters.yml
+              echo "  origin_branch: $ORIGIN_BRANCH" >> parameters.yml
+            done
           done
 
           cat parameters.yml
