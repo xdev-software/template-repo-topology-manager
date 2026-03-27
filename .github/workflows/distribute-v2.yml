@@ -55,11 +55,11 @@ jobs:
                 continue;
               fi
 
-              cat <<EOF >> parameters.yml
+              cat <<EOT >> parameters.yml
               - target: '$REPO'
                 origin_url: '$ORIGIN_URL'
                 origin_branch: '$ORIGIN_BRANCH'
-              EOF
+              EOT
             done
           done
 
