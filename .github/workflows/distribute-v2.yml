@@ -55,9 +55,11 @@ jobs:
                 continue;
               fi
 
-              echo "- target: $REPO" >> parameters.yml
-              echo "  origin_url: '$ORIGIN_URL'" >> parameters.yml
-              echo "  origin_branch: $ORIGIN_BRANCH" >> parameters.yml
+              cat <<EOF >> parameters.yml
+              - target: '$REPO'
+                origin_url: '$ORIGIN_URL'
+                origin_branch: '$ORIGIN_BRANCH'
+              EOF
             done
           done
 
