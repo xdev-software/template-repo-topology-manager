@@ -123,11 +123,19 @@ jobs:
 
               IFS=';' read -r -a TOPO_REPO_DATA_PARTS <<< "$TOPO_REPO_DATA"
 
+              ORIGIN_URL=${TOPO_REPO_DATA_PARTS[2]}
+              ORIGIN_BRANCH=${TOPO_REPO_DATA_PARTS[3]}
+              ORIGIN_SIMPLIFIED_NORMALIZED_URL=${ORIGIN_URL/https:\/\//}
+              ORIGIN_SIMPLIFIED_NORMALIZED_URL=${ORIGIN_SIMPLIFIED_NORMALIZED_URL/.git/}
+              ORIGIN_SIMPLIFIED_NORMALIZED_URL=${ORIGIN_SIMPLIFIED_NORMALIZED_URL//[^[:alnum:]-]/_}
+              ORIGIN_SIMPLIFIED_NORMALIZED_NAME=${ORIGIN_SIMPLIFIED_NORMALIZED_URL}_${ORIGIN_BRANCH//[^[:alnum:]-]/_}
+
               cat <<EOF >> parameters.yml
           - target: '${TOPO_REPO_DATA_PARTS[0]}'
             is_target_a_template: ${TOPO_REPO_DATA_PARTS[1]}
-            origin_url: '${TOPO_REPO_DATA_PARTS[2]}'
-            origin_branch: '${TOPO_REPO_DATA_PARTS[3]}'
+            origin_url: '${ORIGIN_URL}'
+            origin_branch: '${ORIGIN_BRANCH}'
+            origin_simplified_normalized_name: '$ORIGIN_SIMPLIFIED_NORMALIZED_NAME'
           EOF
             done
           done
