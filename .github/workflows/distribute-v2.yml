@@ -46,7 +46,7 @@ jobs:
               -H "Accept: application/vnd.github.raw+json" \
               -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
               -H "X-GitHub-Api-Version: 2026-03-10" \
-              https://api.github.com/repos/$REPO/contents/.config/upstream.yml?ref=$TEMPLATE_REF \
+              https://api.github.com/repos/$REPO/contents/.config/topo/upstream.yml?ref=$TEMPLATE_REF \
               | yq -r '.[]|[.url, .branch] | @tsv')
 
             if [[ -z "$TSV_RESPONSE" ]]; then
@@ -56,7 +56,7 @@ jobs:
                 -H "Accept: application/vnd.github.raw+json" \
                 -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
                 -H "X-GitHub-Api-Version: 2026-03-10" \
-                https://api.github.com/repos/$REPO/contents/.config/upstream.yml \
+                https://api.github.com/repos/$REPO/contents/.config/topo/upstream.yml \
                 | yq -r '.[]|[.url, .branch] | @tsv')
               
               if [[ -z "$TSV_RESPONSE" ]]; then
