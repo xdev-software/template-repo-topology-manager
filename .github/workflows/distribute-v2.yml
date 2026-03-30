@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      matrix-params: ${{ steps.detect-repos.outcome.matrix-params }}
+      matrix: ${{ steps.detect-repos.outcome.matrix }}
     steps:
       - name: Detect repos
         id: detect-repos
@@ -68,13 +68,13 @@ jobs:
           
           cat parameters.yml
           
-          params_json=$(yq -p yaml -o json parameters.yml | jq 'tostring')
-          echo $params_json
-          params_json="${params_json:1:${#params_json}-2}"
+          include_json=$(yq -p yaml -o json parameters.yml | jq 'tostring')
+          echo $include_json
+          include_json="${include_json:1:${#include_json}-2}"
           
-          echo "matrix-params=$params_json"
+          echo "matrix={\"include\":$include_json}"
           
-          echo "matrix-params=$params_json" >> "$GITHUB_OUTPUT"
+          echo "matrix={\"include\":$include_json}" >> "$GITHUB_OUTPUT"
 
   debug:
     needs: 
@@ -83,7 +83,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: |
-          echo "${{ needs.find-repos.outputs.matrix-params }}"
+          echo "${{ needs.find-repos.outputs.matrix }}"
 
   distribute:
     needs: 
@@ -93,8 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix:
-        include: ${{ fromJSON(needs.find-repos.outputs.matrix-params) }}
+      matrix: ${{ fromJSON(needs.find-repos.outputs.matrix) }}
     steps:
       - name: Test
         run: |
