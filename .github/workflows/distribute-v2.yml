@@ -48,7 +48,7 @@ jobs:
           declare -A FULL_URL_ALL_REPO_DATAS
 
           while read REPO; do
-            if [[ $HAS_EXACT_REPOS ]] && ! [[ printf '%s\0' "${EXACT_REPOS[@]}" | grep -Fxqz -- "$REPO" ]]; then
+            if [[ $HAS_EXACT_REPOS ]] && ! printf '%s\0' "${EXACT_REPOS[@]}" | grep -Fxqz -- "$REPO"; then
               echo "Skipping $REPO"
               continue;
             fi
