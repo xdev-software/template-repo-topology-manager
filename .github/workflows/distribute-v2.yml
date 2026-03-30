@@ -38,8 +38,7 @@ jobs:
           TOPO_DATAS=()
           declare -A FULL_URL_ALL_REPO_DATAS
 
-          cat found-repos.txt | while read REPO
-          do
+          while read REPO; do
             echo "Checking $REPO"
 
             TSV_RESPONSE=$(curl --fail -s -L \
@@ -54,7 +53,7 @@ jobs:
               continue
             fi
 
-            echo "$TSV_RESPONSE" | while IFS=$'\t' read -r ORIGIN_URL ORIGIN_BRANCH; do
+            while IFS=$'\t' read -r ORIGIN_URL ORIGIN_BRANCH; do
 
               if [[ $ORIGIN_URL != https://github.com/xdev-software/* ]]; then
                 echo "$REPO: Ignoring invalid upstream: $ORIGIN_URL"
@@ -71,8 +70,8 @@ jobs:
               FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}${REPO_DATA}"
               echo "${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}"
               
-            done
-          done
+            done <<< "$TSV_RESPONSE"
+          done < found-repos.txt
 
           echo "${#TOPO_DATAS[@]}"
           echo "${TOPO_DATAS[@]}"
