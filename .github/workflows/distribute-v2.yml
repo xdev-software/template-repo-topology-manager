@@ -73,7 +73,7 @@ jobs:
           echo "${TOPO_DATAS[@]}"
           echo "Doing topological sort"
           ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
-          echo $ALL_URLS_SORTED
+          echo "${ALL_URLS_SORTED[@]}"
           
           for TOPO_URL in "${ALL_URLS_SORTED[@]}"; do
             TOPO_REPO_DATAS=${FULL_URL_ALL_REPO_DATAS[${TOPO_URL}]}
