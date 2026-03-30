@@ -1,6 +1,7 @@
 name: Distribute
 
 on:
+  push: # DEBUG
   workflow_dispatch:
     inputs:
       no_automatic_merge:
@@ -54,6 +55,7 @@ jobs:
             fi
             echo "Checking $REPO"
 
+            IS_TEMPLATE_REPO=true
             TEMPLATE_REF=template-upstream/$REPO
             TSV_RESPONSE=$(curl --fail -s -L \
               -H "Accept: application/vnd.github.raw+json" \
@@ -64,6 +66,7 @@ jobs:
 
             if [[ -z "$TSV_RESPONSE" ]]; then
               echo "$REPO: Contains no templating info on ref $TEMPLATE_REF"
+              IS_TEMPLATE_REPO=false
 
               TSV_RESPONSE=$(curl --fail -s -L \
                 -H "Accept: application/vnd.github.raw+json" \
@@ -91,15 +94,14 @@ jobs:
                 break;
               fi
               
-              TOPO_DATAS+=(""${ORIGIN_URL} ${REPO_FULL_URL}"")
+              TOPO_DATAS+=("${ORIGIN_URL} ${REPO_FULL_URL}")
 
-              REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
+              REPO_DATA="${REPO};${IS_TEMPLATE_REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
               FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}${REPO_DATA}"
               echo "${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}"
               
             done <<< "$TSV_RESPONSE"
 
-            
           done < found-repos.txt
 
           echo "${TOPO_DATAS[@]}"
@@ -124,8 +126,9 @@ jobs:
 
               cat <<EOF >> parameters.yml
           - target: '${TOPO_REPO_DATA_PARTS[0]}'
-            origin_url: '${TOPO_REPO_DATA_PARTS[1]}'
-            origin_branch: '${TOPO_REPO_DATA_PARTS[2]}'
+            is_target_a_template: ${TOPO_REPO_DATA_PARTS[1]}
+            origin_url: '${TOPO_REPO_DATA_PARTS[2]}'
+            origin_branch: '${TOPO_REPO_DATA_PARTS[3]}'
           EOF
             done
           done
