@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      matrix: ${{ steps.detect-repos.outputs.matrix }}
+      matrix-include: ${{ steps.detect-repos.outputs.matrix-include }}
     steps:
       - name: Detect repos
         id: detect-repos
@@ -68,30 +68,17 @@ jobs:
           
           cat parameters.yml
           
-          include_json=$(yq -p yaml -o json parameters.yml | jq -c)
-          
-          echo "matrix={\"include\":$include_json}"
-          
-          echo 'matrix={"include":[{"target":"xdev-software/vaadin-maps-leaflet-flow","origin_url":"https://github.com/xdev-software/vaadin-addon-template.git","origin_branch":"master"}]}' >> $GITHUB_OUTPUT
-
-  debug:
-    needs: 
-      - find-repos
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: |
-          echo "${{ needs.find-repos.outputs.matrix }}"
+          echo 'matrix-include=$(yq -p yaml -o json parameters.yml | jq -c)' >> $GITHUB_OUTPUT
 
   distribute:
-    needs: 
-      - find-repos
+    needs: find-repos
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix: ${{ fromJSON(needs.find-repos.outputs.matrix) }}
+      matrix: 
+        include: ${{ fromJSON(needs.find-repos.outputs.matrix-include) }}
     steps:
       - name: Test
         run: |
