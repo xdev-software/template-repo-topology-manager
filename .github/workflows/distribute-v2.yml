@@ -69,7 +69,7 @@ jobs:
           cat parameters.yml
           
           params_json=$(yq -p yaml -o json parameters.yml | jq 'tostring')
-          params_json="${includes_json:1:${#includes_json}-2}"
+          params_json="${params_json:1:${#params_json}-2}"
           
           echo "matrix-params=$params_json"
           
