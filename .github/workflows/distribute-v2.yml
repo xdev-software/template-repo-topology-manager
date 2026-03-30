@@ -75,7 +75,7 @@ jobs:
           ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
           echo "${ALL_URLS_SORTED[@]}"
           
-          for TOPO_URL in "${ALL_URLS_SORTED[@]}"; do
+          for TOPO_URL in ${ALL_URLS_SORTED[@]}; do
             TOPO_REPO_DATAS=${FULL_URL_ALL_REPO_DATAS[${TOPO_URL}]}
             if [ -z $TOPO_REPO_DATAS ]; then
               echo "TOPO: No data for ${TOPO_URL}"
