@@ -1,7 +1,6 @@
 name: Distribute
 
 on:
-  push: # DEBUG
   workflow_dispatch:
     inputs:
       no_automatic_merge:
