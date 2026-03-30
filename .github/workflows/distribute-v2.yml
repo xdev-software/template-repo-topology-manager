@@ -26,13 +26,12 @@ jobs:
       - name: Detect repos
         id: detect-repos
         run: |
-          EXACT_REPOS_INPUT=${{ inputs.repositories }}
-          if [[ -z $EXACT_REPOS_INPUT ]]; then
+          if [[ "${{ inputs.repositories }}" == "" ]]; then
             HAS_EXACT_REPOS=false
           else
             echo "Using exact repos"
             HAS_EXACT_REPOS=true
-            IFS=',' read -ra EXACT_REPOS <<< "$EXACT_REPOS_INPUT"
+            IFS=',' read -ra EXACT_REPOS <<< "${{ inputs.repositories }}"
           fi
 
           echo "${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" | gh auth login --with-token
