@@ -41,18 +41,30 @@ jobs:
           while read REPO; do
             echo "Checking $REPO"
 
+            TEMPLATE_REF=template-upstream/$REPO
             TSV_RESPONSE=$(curl --fail -s -L \
               -H "Accept: application/vnd.github.raw+json" \
               -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
               -H "X-GitHub-Api-Version: 2026-03-10" \
-              https://api.github.com/repos/$REPO/contents/.config/upstream.yml \
+              https://api.github.com/repos/$REPO/contents/.config/upstream.yml?ref=$TEMPLATE_REF \
               | yq -r '.[]|[.url, .branch] | @tsv')
-            
-            if [[ -z "$TSV_RESPONSE" ]]; then
-              echo "$REPO: upstream.yml does not exist or is invalid"
-              continue
-            fi
 
+            if [[ -z "$TSV_RESPONSE" ]]; then
+              echo "$REPO: Contains no templating info on ref $TEMPLATE_REF"
+
+              TSV_RESPONSE=$(curl --fail -s -L \
+                -H "Accept: application/vnd.github.raw+json" \
+                -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
+                -H "X-GitHub-Api-Version: 2026-03-10" \
+                https://api.github.com/repos/$REPO/contents/.config/upstream.yml \
+                | yq -r '.[]|[.url, .branch] | @tsv')
+              
+              if [[ -z "$TSV_RESPONSE" ]]; then
+                echo "$REPO: upstream.yml does not exist or is invalid"
+                continue
+              fi
+            fi
+            
             while IFS=$'\t' read -r ORIGIN_URL ORIGIN_BRANCH; do
 
               if [[ $ORIGIN_URL != https://github.com/xdev-software/* ]]; then
@@ -61,6 +73,11 @@ jobs:
               fi
 
               REPO_FULL_URL="https://github.com/${REPO}.git"
+              if [[ "$ORIGIN_URL" == "$REPO_FULL_URL" ]]; then
+                echo "$REPO: Ignoring self reference (likely a template)"
+                break;
+              fi
+              
               TOPO_DATAS+=(""${ORIGIN_URL} ${REPO_FULL_URL}"")
 
               REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
@@ -68,6 +85,8 @@ jobs:
               echo "${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}"
               
             done <<< "$TSV_RESPONSE"
+
+            
           done < found-repos.txt
 
           echo "${TOPO_DATAS[@]}"
