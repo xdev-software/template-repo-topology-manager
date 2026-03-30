@@ -72,7 +72,7 @@ jobs:
           
           echo "matrix={\"include\":$include_json}"
           
-          echo "matrix={\"include\":$include_json}" >> $GITHUB_OUTPUT
+          echo 'matrix={"include":[{"target":"xdev-software/vaadin-maps-leaflet-flow","origin_url":"https://github.com/xdev-software/vaadin-addon-template.git","origin_branch":"master"}]}' >> $GITHUB_OUTPUT
 
   debug:
     needs: 
@@ -97,22 +97,6 @@ jobs:
         run: |
           echo ${{ matrix.target }}
           echo ${{ matrix.origin_url }} ${{ matrix.origin_branch }}
-
-  job1:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        run: echo "matrix={\"include\":[{\"project\":\"foo\",\"config\":\"Debug\"},{\"project\":\"bar\",\"config\":\"Release\"}]}" >> $GITHUB_OUTPUT
-
-  job2:
-    needs: job1
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJSON(needs.job1.outputs.matrix) }}
-    steps:
-      - run: echo "Matrix - Project ${{ matrix.project }}, Config ${{ matrix.config }}"
 
   # distribute:
   #   runs-on: ubuntu-latest
