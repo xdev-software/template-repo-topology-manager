@@ -85,10 +85,10 @@ jobs:
             echo "TOPO: ${TOPO_URL} -> ${TOPO_REPO_DATAS}"
             
             IFS='@' read -ra TOPO_REPO_DATA_ARRAY <<< "$TOPO_REPO_DATAS"
-            for TOPO_REPO_DATA in "${TOPO_REPO_DATA_ARRAY[@]}"; do
+            for TOPO_REPO_DATA in ${TOPO_REPO_DATA_ARRAY[@]}; do
               echo "TOPO_REPO_DATA: $TOPO_REPO_DATA"
 
-              TOPO_REPO_DATA_PARTS=${TOPO_REPO_DATA//;/ }
+              IFS=';' read -r -a TOPO_REPO_DATA_PARTS <<< "$TOPO_REPO_DATA"
 
               cat <<EOF >> parameters.yml
           - target: '${TOPO_REPO_DATA_PARTS[0]}'
