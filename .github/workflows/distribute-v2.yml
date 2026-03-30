@@ -13,6 +13,7 @@ on:
         description: 'Maximum amount of parallel tasks to run'
         default: 1
       repositories:
+        type: string
         description: 'Specify the exact repositories to run on'
 
 jobs:
@@ -25,6 +26,15 @@ jobs:
       - name: Detect repos
         id: detect-repos
         run: |
+          EXACT_REPOS_INPUT=${{ inputs.repositories }}
+          if [[ -z $EXACT_REPOS_INPUT ]]; then
+            HAS_EXACT_REPOS=false
+          else
+            echo "Using exact repos"
+            HAS_EXACT_REPOS=true
+            IFS=',' read -ra EXACT_REPOS <<< "$EXACT_REPOS_INPUT"
+          fi
+
           echo "${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" | gh auth login --with-token
 
           declare -a ORGS=("xdev-software")
@@ -39,6 +49,10 @@ jobs:
           declare -A FULL_URL_ALL_REPO_DATAS
 
           while read REPO; do
+            if [[ $HAS_EXACT_REPOS ]] && [[ ! " ${EXACT_REPOS[*]} " =~ [[:space:]]${$REPO}[[:space:]] ]]; then
+              echo "Skipping $REPO"
+              continue;
+            fi
             echo "Checking $REPO"
 
             TEMPLATE_REF=template-upstream/$REPO
@@ -121,20 +135,20 @@ jobs:
           
           echo "matrix-include=$(yq -p yaml -o json parameters.yml | jq -c)" >> $GITHUB_OUTPUT
 
-  # distribute:
-  #   needs: find-repos
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 30
-  #   strategy:
-  #     fail-fast: false
-  #     max-parallel: 1
-  #     matrix: 
-  #       include: ${{ fromJSON(needs.find-repos.outputs.matrix-include) }}
-  #   steps:
-  #     - name: Test
-  #       run: |
-  #         echo ${{ matrix.target }}
-  #         echo ${{ matrix.origin_url }} ${{ matrix.origin_branch }}
+  distribute:
+    needs: find-repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.max-parallel || 1 }}
+      matrix: 
+        include: ${{ fromJSON(needs.find-repos.outputs.matrix-include) }}
+    steps:
+      - name: Test
+        run: |
+          echo ${{ matrix.target }}
+          echo ${{ matrix.origin_url }} ${{ matrix.origin_branch }}
 
   # distribute:
   #   runs-on: ubuntu-latest
