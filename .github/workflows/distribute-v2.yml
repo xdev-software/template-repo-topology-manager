@@ -140,7 +140,9 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      max-parallel: ${{ inputs.max-parallel || 1 }}
+      # Workaround using fromJSON because number(input) is not a number(in yaml below) but a string!
+      # https://github.com/orgs/community/discussions/67182
+      max-parallel: ${{ inputs.max-parallel && fromJSON(inputs.max-parallel) || 1 }}
       matrix: 
         include: ${{ fromJSON(needs.find-repos.outputs.matrix-include) }}
     steps:
