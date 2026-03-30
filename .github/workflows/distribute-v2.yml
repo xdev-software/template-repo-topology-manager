@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      matrix: ${{ steps.detect-repos.outcome.matrix }}
+      matrix: ${{ steps.detect-repos.outputs.matrix }}
     steps:
       - name: Detect repos
         id: detect-repos
