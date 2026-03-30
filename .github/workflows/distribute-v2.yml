@@ -65,14 +65,17 @@ jobs:
 
               REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
               TOPO_DATAS+=("${ORIGIN_URL} ${REPO_FULL_URL}")
-              FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}$REPO_DATA"
+              FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}${REPO_DATA}"
               echo "${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}"
               
             done
           done
 
+          echo "${TOPO_DATAS[@]}"
+          echo "Doing topological sort"
           ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
           echo $ALL_URLS_SORTED
+          
           for TOPO_URL in "${ALL_URLS_SORTED[@]}"; do
             TOPO_REPO_DATAS=FULL_URL_ALL_REPO_DATAS[$TOPO_URL]
             if [ -z $TOPO_REPO_DATAS ]; then
