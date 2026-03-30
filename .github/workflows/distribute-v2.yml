@@ -34,6 +34,10 @@ jobs:
             echo "Getting repos for $ORG"
             gh repo list --no-archived -L 1000 $ORG --json nameWithOwner --jq '.[].nameWithOwner' >> found-repos.txt
           done
+          
+          REPO_DATAS=()
+          TOPO_DATAS=()
+          declare -A FULL_URL_ALL_REPO_DATAS
 
           cat found-repos.txt | while read REPO
           do
@@ -58,10 +62,37 @@ jobs:
                 continue;
               fi
 
+              REPO_FULL_URL="https://github.com/${REPO}.git"
+              
+              REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
+              REPO_DATAS+=("${REPO_DATA}")
+              TOPO_DATAS+=("${ORIGIN_URL} ${REPO_FULL_URL}")
+              FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}$REPO_DATA"
+              
+            done
+          done
+
+          ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
+          echo $ALL_URLS_SORTED
+          for TOPO_URL in "${ALL_URLS_SORTED[@]}"; do
+            TOPO_REPO_DATAS=FULL_URL_ALL_REPO_DATAS[$TOPO_URL]
+            if [ -z $TOPO_REPO_DATAS ]; then
+              echo "TOPO: No data for ${TOPO_URL}"
+              continue;
+            fi
+
+            echo "TOPO: ${TOPO_URL} -> ${TOPO_REPO_DATAS}"
+            
+            IFS='@' read -ra TOPO_REPO_DATA_ARRAY <<< "$TOPO_REPO_DATAS"
+            for TOPO_REPO_DATA in "${TOPO_REPO_DATA_ARRAY[@]}"; do
+              echo "TOPO_REPO_DATA: $TOPO_REPO_DATA"
+
+              TOPO_REPO_DATA_PARTS=${TOPO_REPO_DATA//;/ }
+
               cat <<EOF >> parameters.yml
-          - target: '$REPO'
-            origin_url: '$ORIGIN_URL'
-            origin_branch: '$ORIGIN_BRANCH'
+          - target: '${TOPO_REPO_DATA_PARTS[0]}'
+            origin_url: '${TOPO_REPO_DATA_PARTS[1]}'
+            origin_branch: '${TOPO_REPO_DATA_PARTS[2]}'
           EOF
             done
           done
