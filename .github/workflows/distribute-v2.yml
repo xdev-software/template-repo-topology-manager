@@ -35,7 +35,6 @@ jobs:
             gh repo list --no-archived -L 1000 $ORG --json nameWithOwner --jq '.[].nameWithOwner' >> found-repos.txt
           done
           
-          REPO_DATAS=()
           TOPO_DATAS=()
           declare -A FULL_URL_ALL_REPO_DATAS
 
@@ -63,11 +62,11 @@ jobs:
               fi
 
               REPO_FULL_URL="https://github.com/${REPO}.git"
-              
+
               REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
-              REPO_DATAS+=("${REPO_DATA}")
               TOPO_DATAS+=("${ORIGIN_URL} ${REPO_FULL_URL}")
               FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}$REPO_DATA"
+              echo "${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}"
               
             done
           done
