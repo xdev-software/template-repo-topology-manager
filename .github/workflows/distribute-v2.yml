@@ -68,7 +68,7 @@ jobs:
           
           cat parameters.yml
           
-          echo 'matrix-include=$(yq -p yaml -o json parameters.yml | jq -c)' >> $GITHUB_OUTPUT
+          echo "matrix-include=$(yq -p yaml -o json parameters.yml | jq -c)" >> $GITHUB_OUTPUT
 
   distribute:
     needs: find-repos
