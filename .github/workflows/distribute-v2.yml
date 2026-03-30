@@ -72,11 +72,20 @@ jobs:
           
           echo "matrix-params=$(yq -p yaml -o json parameters.yml | jq -c)" >> "$GITHUB_OUTPUT"
 
-  distribute:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  debug:
     needs: 
       - find-repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          echo "${{ needs.find-repos.outputs.matrix-params }}"
+
+  distribute:
+    needs: 
+      - find-repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 1
