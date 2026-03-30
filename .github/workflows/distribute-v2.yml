@@ -73,7 +73,7 @@ jobs:
           done
 
           cat parameters.yml
-          yq -p yaml -o json parameters.yml > "$GITHUB_OUTPUT"
+          echo "matrix-params=$(yq -p yaml -o json parameters.yml | jq -c)" >> "$GITHUB_OUTPUT"
 
   distribute:
     runs-on: ubuntu-latest
