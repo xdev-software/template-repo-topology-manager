@@ -48,7 +48,7 @@ jobs:
           declare -A FULL_URL_ALL_REPO_DATAS
 
           while read REPO; do
-            if [[ $HAS_EXACT_REPOS ]] && ! printf '%s\0' "${EXACT_REPOS[@]}" | grep -Fxqz -- "$REPO"; then
+            if [ "$HAS_EXACT_REPOS" = true ] && ! printf '%s\0' "${EXACT_REPOS[@]}" | grep -Fxqz -- "$REPO"; then
               echo "Skipping $REPO"
               continue;
             fi
@@ -136,22 +136,22 @@ jobs:
           
           echo "matrix-include=$(yq -p yaml -o json parameters.yml | jq -c)" >> $GITHUB_OUTPUT
 
-  distribute:
-    needs: find-repos
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      # Workaround using fromJSON because number(input) is not a number(in yaml below) but a string!
-      # https://github.com/orgs/community/discussions/67182
-      max-parallel: ${{ inputs.max-parallel && fromJSON(inputs.max-parallel) || 1 }}
-      matrix: 
-        include: ${{ fromJSON(needs.find-repos.outputs.matrix-include) }}
-    steps:
-      - name: Test
-        run: |
-          echo ${{ matrix.target }}
-          echo ${{ matrix.origin_url }} ${{ matrix.origin_branch }}
+  # distribute:
+  #   needs: find-repos
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
+  #   strategy:
+  #     fail-fast: false
+  #     # Workaround using fromJSON because number(input) is not a number(in yaml below) but a string!
+  #     # https://github.com/orgs/community/discussions/67182
+  #     max-parallel: ${{ inputs.max-parallel && fromJSON(inputs.max-parallel) || 1 }}
+  #     matrix: 
+  #       include: ${{ fromJSON(needs.find-repos.outputs.matrix-include) }}
+  #   steps:
+  #     - name: Test
+  #       run: |
+  #         echo ${{ matrix.target }}
+  #         echo ${{ matrix.origin_url }} ${{ matrix.origin_branch }}
 
   # distribute:
   #   runs-on: ubuntu-latest
