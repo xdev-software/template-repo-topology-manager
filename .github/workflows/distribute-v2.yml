@@ -25,8 +25,11 @@ jobs:
   find-repos:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      matrix-params: ${{ steps.detect-repos.outcome.matrix-params }}
     steps:
       - name: Detect repos
+        id: detect-repos
         run: |
           echo "${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" | gh auth login --with-token
 
@@ -70,6 +73,23 @@ jobs:
           done
 
           cat parameters.yml
+          yq -p yaml -o json parameters.yml > "$GITHUB_OUTPUT"
+
+  distribute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: 
+      - find-repos
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJson(needs.find-repos.outputs.matrix-params) }}
+    steps:
+      - name: Test
+        run: |
+          echo ${{ matrix.target }}
+          echo ${{ matrix.origin_url }} ${{ matrix.origin_branch }}
 
   # distribute:
   #   runs-on: ubuntu-latest
