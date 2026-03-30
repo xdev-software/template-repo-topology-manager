@@ -72,7 +72,7 @@ jobs:
           
           echo "matrix={\"include\":$include_json}"
           
-          echo "matrix={\"include\":$include_json}" >> "$GITHUB_OUTPUT"
+          echo "matrix={\"include\":$include_json}" >> $GITHUB_OUTPUT
 
   debug:
     needs: 
