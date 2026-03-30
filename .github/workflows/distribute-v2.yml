@@ -62,17 +62,18 @@ jobs:
               fi
 
               REPO_FULL_URL="https://github.com/${REPO}.git"
-
-              REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
               TOPO_DATA="${ORIGIN_URL} ${REPO_FULL_URL}"
               echo $TOPO_DATA
-              TOPO_DATAS+=("${TOPO_DATA}")
+              TOPO_DATAS+=($TOPO_DATA)
+
+              REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
               FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}${REPO_DATA}"
               echo "${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}"
               
             done
           done
 
+          echo "${#TOPO_DATAS[@]}"
           echo "${TOPO_DATAS[@]}"
           echo "Doing topological sort"
           ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
