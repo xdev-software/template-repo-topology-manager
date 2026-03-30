@@ -14,13 +14,6 @@ on:
       repositories:
         description: 'Specify the exact repositories to run on'
 
-# env:
-#  REMOTE_BRANCH: master
-
-# permissions:
-#   contents: write
-#   pull-requests: write
-
 jobs:
   find-repos:
     runs-on: ubuntu-latest
@@ -87,7 +80,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        include: ${{ fromJson(needs.find-repos.outputs.matrix-params) }}
+        include: ${{ fromJSON(needs.find-repos.outputs.matrix-params) }}
     steps:
       - name: Test
         run: |
