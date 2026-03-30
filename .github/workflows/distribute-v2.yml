@@ -65,6 +65,7 @@ jobs:
               TOPO_DATA="${ORIGIN_URL} ${REPO_FULL_URL}"
               echo $TOPO_DATA
               TOPO_DATAS+=("${TOPO_DATA}")
+              echo "${#TOPO_DATAS[@]}"
 
               REPO_DATA="${REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
               FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}${REPO_DATA}"
