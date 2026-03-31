@@ -1,0 +1,215 @@
+name: Distribute templates
+
+on:
+  schedule:
+    - cron: '14 22 * * *'
+  workflow_dispatch:
+    inputs:
+      no_automatic_merge:
+        type: boolean
+        description: 'No automatic merge'
+        default: false
+
+env:
+  REMOTE_BRANCH: master
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  distribute:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+        # Base
+        - source: xdev-software/base-template
+          target: xdev-software/java-template
+        - source: xdev-software/java-setup-template
+          target: xdev-software/java-template
+        # Java
+        - source: xdev-software/java-template
+          target: xdev-software/standard-maven-template
+        - source: xdev-software/java-template
+          target: xdev-software/intellij-plugin-template
+        # Standard Maven
+        - source: xdev-software/standard-maven-template
+          target: xdev-software/vaadin-addon-template
+        - source: xdev-software/standard-maven-template
+          target: xdev-software/openapi-client-maven-template
+    env:
+      UPDATE_BRANCH: ${{ format('update-from-template-{0}', matrix.source) }}
+      UPDATE_BRANCH_MERGED: ${{ format('update-from-template-{0}-merged', matrix.source) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Required because otherwise there are always changes detected when executing diff/rev-list
+          fetch-depth: 0
+          # If no PAT is used the following error occurs on a push:
+          # refusing to allow a GitHub App to create or update workflow `.github/workflows/xxx.yml` without `workflows` permission
+          token: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+          repository: ${{ matrix.target }}
+
+      - name: Init Git
+        run: |
+          git config --global user.email "111048771+xdev-gh-bot@users.noreply.github.com"
+          git config --global user.name "XDEV Bot"
+
+      - name: Manage branches
+        id: manage-branches
+        run: |
+          echo "Adding remote template-repo"
+          git remote add template https://github.com/${{ matrix.source }}
+          
+          echo "Fetching remote template repo"
+          git fetch template
+          
+          echo "Deleting local branches that will contain the updates - if present"
+          git branch -D ${{ env.UPDATE_BRANCH }} || true
+          git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
+          
+          echo "Checking if the remote template repo has new commits"
+          git rev-list ..template/${{ env.REMOTE_BRANCH }}
+
+          if [ $(git rev-list --count ..template/${{ env.REMOTE_BRANCH }}) -eq 0 ]; then
+            echo "There are no new commits on the template repo"
+            
+            echo "Deleting origin branch(es) that contain the updates - if present"
+            git push -f origin --delete ${{ env.UPDATE_BRANCH }} || true
+            git push -f origin --delete ${{ env.UPDATE_BRANCH_MERGED }} || true
+            
+            echo "create_update_branch_pr=0" >> $GITHUB_OUTPUT
+            echo "create_update_branch_merged_pr=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Found new commits on the template repo"
+          
+          echo "Creating update branch"
+          git branch ${{ env.UPDATE_BRANCH }} template/${{ env.REMOTE_BRANCH }}
+          git branch --unset-upstream ${{ env.UPDATE_BRANCH }}
+          
+          echo "Pushing update branch"
+          git push -f -u origin ${{ env.UPDATE_BRANCH }}
+          
+          echo "Getting base branch"
+          base_branch=$(git branch --show-current)
+          echo "Base branch is $base_branch"
+          echo "base_branch=$base_branch" >> $GITHUB_OUTPUT
+
+          echo "Trying to create auto-merged branch ${{ env.UPDATE_BRANCH_MERGED }}"
+          git branch ${{ env.UPDATE_BRANCH_MERGED }} ${{ env.UPDATE_BRANCH }}
+          git checkout ${{ env.UPDATE_BRANCH_MERGED }}
+          
+          echo "Merging branch $base_branch into ${{ env.UPDATE_BRANCH_MERGED }}"
+          git merge $base_branch && merge_exit_code=$? || merge_exit_code=$?
+          if [ $merge_exit_code -ne 0 ]; then
+              echo "Auto merge failed! Manual merge required"
+              echo "::notice ::Auto merge failed - Manual merge required"
+
+              echo "Cleaning up failed merge"
+              git merge --abort
+              git checkout $base_branch
+              git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
+
+              echo "Deleting auto-merge branch - if present"
+              git push -f origin --delete ${{ env.UPDATE_BRANCH_MERGED }} || true
+
+              echo "create_update_branch_pr=1" >> $GITHUB_OUTPUT
+              echo "create_update_branch_merged_pr=0" >> $GITHUB_OUTPUT
+              exit 0
+          fi
+
+          echo "Pushing auto-merged branch"
+          git push -f -u origin ${{ env.UPDATE_BRANCH_MERGED }}
+
+          echo "update_branch_merged_commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+          echo "Restoring base branch $base_branch"
+          git checkout $base_branch
+
+          echo "create_update_branch_pr=0" >> $GITHUB_OUTPUT
+          echo "create_update_branch_merged_pr=1" >> $GITHUB_OUTPUT
+          echo "try_close_update_branch_pr=1" >> $GITHUB_OUTPUT
+
+      - name: Create/Update PR update_branch
+        if: steps.manage-branches.outputs.create_update_branch_pr == 1
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+        run: |
+          gh_pr_up() { 
+            gh pr create -H "${{ env.UPDATE_BRANCH }}" "$@" || (git checkout "${{ env.UPDATE_BRANCH }}" && gh pr edit "$@")
+          }
+          gh_pr_up -B "${{ steps.manage-branches.outputs.base_branch }}" \
+            --title "Update from template" \
+            --body "An automated PR to sync changes from the template into this repo"
+
+      # Ensure that only a single PR is open (otherwise confusion and spam)
+      - name: Close PR update_branch
+        if: steps.manage-branches.outputs.try_close_update_branch_pr == 1
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+        run: |
+          gh pr close "${{ env.UPDATE_BRANCH }}" || true
+
+      - name: Create/Update PR update_branch_merged
+        if: steps.manage-branches.outputs.create_update_branch_merged_pr == 1
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+        run: |
+          gh_pr_up() { 
+            gh pr create -H "${{ env.UPDATE_BRANCH_MERGED }}" "$@" || (git checkout "${{ env.UPDATE_BRANCH_MERGED }}" && gh pr edit "$@")
+          }
+          gh_pr_up -B "${{ steps.manage-branches.outputs.base_branch }}" \
+            --title "Update from template (auto-merged)" \
+            --body "An automated PR to sync changes from the template into this repo"
+
+      # Auto-Merge check is not required as template repos don't have any actions enabled
+
+      - name: Auto-merge update_branch_merged
+        if: steps.manage-branches.outputs.create_update_branch_merged_pr == 1
+        run: |
+          base_branch="${{ steps.manage-branches.outputs.base_branch }}"
+          echo "Restoring base branch $base_branch"
+          git checkout $base_branch
+
+          echo "Fetching..."
+          git fetch
+
+          expected_commit="${{ steps.manage-branches.outputs.update_branch_merged_commit }}"
+          actual_commit=$(git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }})
+          if [[ "$expected_commit" != "$actual_commit" ]]; then
+            echo "Branch ${{ env.UPDATE_BRANCH_MERGED }} contains unexpected commit $actual_commit"
+            echo "Expected: $expected_commit"
+
+            exit 0
+          fi
+
+          echo "Ensuring that current branch $base_branch is up-to-date"
+          git pull
+
+          echo "Merging ${{ env.UPDATE_BRANCH_MERGED }} into $base_branch"
+          git merge ${{ env.UPDATE_BRANCH_MERGED }} && merge_exit_code=$? || merge_exit_code=$?
+          if [ $merge_exit_code -ne 0 ]; then
+            echo "Unexpected merge failure $merge_exit_code - Requires manual resolution"
+
+            exit 0
+          fi
+
+          if [[ "${{ inputs.no_automatic_merge }}" == "true" ]]; then
+            echo "Exiting due to no_automatic_merge"
+
+            exit 0
+          fi
+
+          echo "Pushing"
+          git push
+
+          echo "Cleaning up"
+          git branch -D ${{ env.UPDATE_BRANCH }} || true
+          git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
+          git push -f origin --delete ${{ env.UPDATE_BRANCH }} || true
+          git push -f origin --delete ${{ env.UPDATE_BRANCH_MERGED }} || true

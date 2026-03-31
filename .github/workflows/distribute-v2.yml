@@ -1,0 +1,581 @@
+name: Distribute
+
+# This workflow keeps the repos up to date with changes from the template repo(s)
+# It creates a new branch/PR and can also automatically merge the created PRs if 
+# there are no conflicts and all checks succeed.
+#
+# Note that this requires a PAT (Personal Access Token) - at best from a servicing account
+# PAT permissions: read:discussion, read:org, repo, workflow
+# 
+# Also note that you should have at least once merge the template repo into the current repo manually
+# otherwise a "refusing to merge unrelated histories" error might occur.
+# 
+# History:
+# This is workflow succeeds 
+# * Update from Template (in the repositories themselves)
+# * Distribute Templates
+# it was created due to security concerns (keeping a write PAT for each individual repository is too risky)
+
+on:
+  workflow_dispatch:
+    inputs:
+      no_automatic_merge:
+        type: boolean
+        description: 'No automatic merge'
+        default: false
+      max-parallel:
+        type: number
+        description: 'Maximum amount of parallel tasks to run'
+        default: 1
+      repositories:
+        type: string
+        description: 'Specify the exact repositories to run on'
+
+jobs:
+  prepare-and-find-repos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix-include: ${{ steps.detect-repos.outputs.matrix-include }}
+      run-instance-id: ${{ steps.generate-random-run-instance-id.outputs.rid }}
+    steps:
+      - name: Generate random run instance id
+        id: generate-random-run-instance-id
+        run: |
+          echo "rid=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c32)" >> $GITHUB_OUTPUT
+
+      - name: Detect repos
+        id: detect-repos
+        run: |
+          if [[ "${{ inputs.repositories }}" == "" ]]; then
+            HAS_EXACT_REPOS=false
+          else
+            echo "Using exact repos"
+            HAS_EXACT_REPOS=true
+            IFS=',' read -ra EXACT_REPOS <<< "${{ inputs.repositories }}"
+          fi
+
+          echo "${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" | gh auth login --with-token
+
+          declare -a ORGS=("xdev-software")
+
+          for ORG in "${ORGS[@]}"
+          do
+            echo "Getting repos for $ORG"
+            gh repo list --no-archived -L 1000 $ORG --json nameWithOwner --jq '.[].nameWithOwner' >> found-repos.txt
+          done
+          
+          TOPO_DATAS=()
+          declare -A FULL_URL_ALL_REPO_DATAS
+
+          while read REPO; do
+            if [ "$HAS_EXACT_REPOS" = true ] && ! printf '%s\0' "${EXACT_REPOS[@]}" | grep -Fxqz -- "$REPO"; then
+              echo "Skipping $REPO"
+              continue;
+            fi
+            echo "Checking $REPO"
+
+            IS_TEMPLATE_REPO=true
+            TEMPLATE_REF=template-upstream/$REPO
+            TSV_RESPONSE=$(curl --fail -s -L \
+              -H "Accept: application/vnd.github.raw+json" \
+              -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              https://api.github.com/repos/$REPO/contents/.config/topo/upstream.yml?ref=$TEMPLATE_REF \
+              | yq -r '.[]|[.url, .branch] | @tsv')
+
+            if [[ -z "$TSV_RESPONSE" ]]; then
+              echo "$REPO: Contains no templating info on ref $TEMPLATE_REF"
+              IS_TEMPLATE_REPO=false
+
+              TSV_RESPONSE=$(curl --fail -s -L \
+                -H "Accept: application/vnd.github.raw+json" \
+                -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
+                -H "X-GitHub-Api-Version: 2026-03-10" \
+                https://api.github.com/repos/$REPO/contents/.config/topo/upstream.yml \
+                | yq -r '.[]|[.url, .branch] | @tsv')
+              
+              if [[ -z "$TSV_RESPONSE" ]]; then
+                echo "$REPO: upstream.yml does not exist or is invalid"
+                continue
+              fi
+            fi
+            
+            while IFS=$'\t' read -r ORIGIN_URL ORIGIN_BRANCH; do
+
+              if [[ $ORIGIN_URL != https://github.com/xdev-software/* ]]; then
+                echo "$REPO: Ignoring invalid upstream: $ORIGIN_URL"
+                continue;
+              fi
+
+              REPO_FULL_URL="https://github.com/${REPO}.git"
+              if [[ "$ORIGIN_URL" == "$REPO_FULL_URL" ]]; then
+                echo "$REPO: Ignoring self reference (likely a template)"
+                break;
+              fi
+              
+              TOPO_DATAS+=("${ORIGIN_URL} ${REPO_FULL_URL}")
+
+              REPO_DATA="${REPO};${IS_TEMPLATE_REPO};${ORIGIN_URL};${ORIGIN_BRANCH}"
+              FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]="${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]:+@}${REPO_DATA}"
+              echo "${FULL_URL_ALL_REPO_DATAS[$REPO_FULL_URL]}"
+              
+            done <<< "$TSV_RESPONSE"
+
+          done < found-repos.txt
+
+          echo "Topo data:"
+          echo "${TOPO_DATAS[@]}"
+
+          echo "Calculating topology: Doing topological sort"
+          ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
+          echo "${ALL_URLS_SORTED[@]}"
+          
+          for TOPO_URL in ${ALL_URLS_SORTED[@]}; do
+            TOPO_REPO_DATAS=${FULL_URL_ALL_REPO_DATAS[${TOPO_URL}]}
+            if [ -z $TOPO_REPO_DATAS ]; then
+              echo "TOPO: No data for ${TOPO_URL}"
+              continue;
+            fi
+
+            echo "TOPO: ${TOPO_URL} -> ${TOPO_REPO_DATAS}"
+            
+            IFS='@' read -ra TOPO_REPO_DATA_ARRAY <<< "$TOPO_REPO_DATAS"
+            for TOPO_REPO_DATA in ${TOPO_REPO_DATA_ARRAY[@]}; do
+              echo "TOPO_REPO_DATA: $TOPO_REPO_DATA"
+
+              IFS=';' read -r -a TOPO_REPO_DATA_PARTS <<< "$TOPO_REPO_DATA"
+
+              ORIGIN_URL=${TOPO_REPO_DATA_PARTS[2]}
+              ORIGIN_BRANCH=${TOPO_REPO_DATA_PARTS[3]}
+              ORIGIN_SIMPLIFIED_NORMALIZED_URL=${ORIGIN_URL/https:\/\//}
+              ORIGIN_SIMPLIFIED_NORMALIZED_URL=${ORIGIN_SIMPLIFIED_NORMALIZED_URL/.git/}
+              ORIGIN_SIMPLIFIED_NORMALIZED_URL=${ORIGIN_SIMPLIFIED_NORMALIZED_URL//[^[:alnum:]-]/_}
+              ORIGIN_SIMPLIFIED_NORMALIZED_NAME=${ORIGIN_SIMPLIFIED_NORMALIZED_URL}_${ORIGIN_BRANCH//[^[:alnum:]-]/_}
+
+              RANDOM_ID=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c32)
+
+              cat <<EOF >> parameters.yml
+          - target: '${TOPO_REPO_DATA_PARTS[0]}'
+            is_target_a_template: ${TOPO_REPO_DATA_PARTS[1]}
+            origin_url: '${ORIGIN_URL}'
+            origin_branch: '${ORIGIN_BRANCH}'
+            origin_simplified_normalized_name: '${ORIGIN_SIMPLIFIED_NORMALIZED_NAME}'
+            random_id: '${RANDOM_ID}'
+          EOF
+            done
+          done
+          
+          cat parameters.yml
+          
+          echo "matrix-include=$(yq -p yaml -o json parameters.yml | jq -c)" >> $GITHUB_OUTPUT
+
+  update:
+    needs: prepare-and-find-repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true # Ignore failures of single jobs
+    strategy:
+      fail-fast: false
+      # Workaround using fromJSON because number(input) is not a number(in yaml below) but a string!
+      # https://github.com/orgs/community/discussions/67182
+      max-parallel: ${{ inputs.max-parallel && fromJSON(inputs.max-parallel) || 1 }}
+      matrix: 
+        include: ${{ fromJSON(needs.prepare-and-find-repos.outputs.matrix-include) }}
+    name: update (${{ matrix.target }} <- ${{ matrix.origin_url }}@${{ matrix.origin_branch }})
+    env:
+      UPDATE_BRANCH: ${{ format('update-from-template-{0}', matrix.origin_simplified_normalized_name) }}
+      UPDATE_BRANCH_MERGED: ${{ format('update-from-template-{0}-merged', matrix.origin_simplified_normalized_name) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Required because otherwise there are always changes detected when executing diff/rev-list
+          fetch-depth: 0
+          # If no PAT is used the following error occurs on a push:
+          # refusing to allow a GitHub App to create or update workflow `.github/workflows/xxx.yml` without `workflows` permission
+          token: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+          repository: ${{ matrix.target }}
+
+      - name: Init Git
+        run: |
+          git config --global user.email "111048771+xdev-gh-bot@users.noreply.github.com"
+          git config --global user.name "XDEV Bot"
+
+      - name: Manage branches
+        id: manage-branches
+        run: |
+          echo "Adding remote template-repo"
+          git remote add template ${{ matrix.origin_url }}
+          
+          echo "Fetching remote template repo"
+          git fetch template
+          
+          echo "Deleting local branches that will contain the updates - if present"
+          git branch -D ${{ env.UPDATE_BRANCH }} || true
+          git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
+          
+          echo "Checking if the remote template repo has new commits"
+          git rev-list ..template/${{ matrix.origin_branch }}
+
+          if [ $(git rev-list --count ..template/${{ matrix.origin_branch }}) -eq 0 ]; then
+            echo "There are no new commits on the template repo"
+            
+            echo "Deleting origin branch(es) that contain the updates - if present"
+            git push -f origin --delete ${{ env.UPDATE_BRANCH }} || true
+            git push -f origin --delete ${{ env.UPDATE_BRANCH_MERGED }} || true
+            
+            echo "create_update_branch_pr=0" >> $GITHUB_OUTPUT
+            echo "create_update_branch_merged_pr=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Found new commits on the template repo"
+          
+          echo "Creating update branch"
+          git branch ${{ env.UPDATE_BRANCH }} template/${{ matrix.origin_branch }}
+          git branch --unset-upstream ${{ env.UPDATE_BRANCH }}
+          
+          echo "Pushing update branch"
+          git push -f -u origin ${{ env.UPDATE_BRANCH }}
+          
+          echo "Getting base branch"
+          base_branch=$(git branch --show-current)
+          echo "Base branch is $base_branch"
+          echo "base_branch=$base_branch" >> $GITHUB_OUTPUT
+
+          echo "Trying to create auto-merged branch ${{ env.UPDATE_BRANCH_MERGED }}"
+          git branch ${{ env.UPDATE_BRANCH_MERGED }} ${{ env.UPDATE_BRANCH }}
+          git checkout ${{ env.UPDATE_BRANCH_MERGED }}
+          
+          echo "Merging branch $base_branch into ${{ env.UPDATE_BRANCH_MERGED }}"
+          git merge $base_branch && merge_exit_code=$? || merge_exit_code=$?
+          if [ $merge_exit_code -ne 0 ]; then
+              echo "Auto merge failed! Manual merge required"
+              echo "::notice ::Auto merge failed - Manual merge required"
+
+              echo "Cleaning up failed merge"
+              git merge --abort
+              git checkout $base_branch
+              git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
+
+              echo "Deleting auto-merge branch - if present"
+              git push -f origin --delete ${{ env.UPDATE_BRANCH_MERGED }} || true
+
+              echo "create_update_branch_pr=1" >> $GITHUB_OUTPUT
+              echo "create_update_branch_merged_pr=0" >> $GITHUB_OUTPUT
+              exit 0
+          fi
+
+          if [[ "${{ matrix.is_target_a_template }}" == false ]]; then
+            echo "Post processing: Trying to automatically fill in template variables"
+            find . -type f \
+              -not -path "./.git/**" \
+              -not -path "./.github/workflows/update-from-template.yml" -print0 \
+              | xargs -0 sed -i "s/template-placeholder/${GITHUB_REPOSITORY#*/}/g"
+
+            git status
+            git add --all
+
+            if [[ "$(git status --porcelain)" != "" ]]; then
+              echo "Filled in template; Committing"
+
+              git commit -m "Fill in template"
+            fi
+          fi
+
+          echo "Pushing auto-merged branch"
+          git push -f -u origin ${{ env.UPDATE_BRANCH_MERGED }}
+
+          echo "update_branch_merged_commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+          echo "Restoring base branch $base_branch"
+          git checkout $base_branch
+
+          echo "create_update_branch_pr=0" >> $GITHUB_OUTPUT
+          echo "create_update_branch_merged_pr=1" >> $GITHUB_OUTPUT
+          echo "try_close_update_branch_pr=1" >> $GITHUB_OUTPUT
+
+      - name: Create/Update PR update_branch
+        if: steps.manage-branches.outputs.create_update_branch_pr == 1
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+        run: |
+          gh_pr_up() { 
+            gh pr create -H "${{ env.UPDATE_BRANCH }}" "$@" || (git checkout "${{ env.UPDATE_BRANCH }}" && gh pr edit "$@")
+          }
+          gh_pr_up -B "${{ steps.manage-branches.outputs.base_branch }}" \
+            --title "Update from template" \
+            --body "An automated PR to sync changes from the template into this repo"
+
+      # Ensure that only a single PR is open (otherwise confusion and spam)
+      - name: Close PR update_branch
+        if: steps.manage-branches.outputs.try_close_update_branch_pr == 1
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+        run: |
+          gh pr close "${{ env.UPDATE_BRANCH }}" || true
+
+      - name: Create/Update PR update_branch_merged
+        if: steps.manage-branches.outputs.create_update_branch_merged_pr == 1
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+        run: |
+          gh_pr_up() { 
+            gh pr create -H "${{ env.UPDATE_BRANCH_MERGED }}" "$@" || (git checkout "${{ env.UPDATE_BRANCH_MERGED }}" && gh pr edit "$@")
+          }
+          gh_pr_up -B "${{ steps.manage-branches.outputs.base_branch }}" \
+            --title "Update from template (auto-merged)" \
+            --body "An automated PR to sync changes from the template into this repo"
+
+      # Template-Repo: Auto-Merge check is not required as no actions are enabled
+      - name: Template - Auto-merge update_branch_merged
+        if: ${{ matrix.is_target_a_template && steps.manage-branches.outputs.create_update_branch_merged_pr == 1 }}
+        run: |
+          base_branch="${{ steps.manage-branches.outputs.base_branch }}"
+          echo "Restoring base branch $base_branch"
+          git checkout $base_branch
+
+          echo "Fetching..."
+          git fetch
+          if git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }} 1> /dev/null 2>&1; then
+            echo "Branch still exists; Continuing..."
+          else
+            echo "Branch origin/${{ env.UPDATE_BRANCH_MERGED }} is missing"
+            exit 0
+          fi
+
+          expected_commit="${{ steps.manage-branches.outputs.update_branch_merged_commit }}"
+          actual_commit=$(git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }})
+          if [[ "$expected_commit" != "$actual_commit" ]]; then
+            echo "Branch ${{ env.UPDATE_BRANCH_MERGED }} contains unexpected commit $actual_commit"
+            echo "Expected: $expected_commit"
+
+            exit 0
+          fi
+
+          echo "Ensuring that current branch $base_branch is up-to-date"
+          git pull
+
+          echo "Merging origin/${{ env.UPDATE_BRANCH_MERGED }} into $base_branch"
+          git merge origin/${{ env.UPDATE_BRANCH_MERGED }} && merge_exit_code=$? || merge_exit_code=$?
+          if [ $merge_exit_code -ne 0 ]; then
+            echo "Unexpected merge failure $merge_exit_code - Requires manual resolution"
+
+            exit 0
+          fi
+
+          if [[ "${{ inputs.no_automatic_merge }}" == "true" ]]; then
+            echo "Exiting due to no_automatic_merge"
+
+            exit 0
+          fi
+
+          echo "Pushing"
+          git push
+
+          echo "Cleaning up"
+          git branch -D ${{ env.UPDATE_BRANCH }} || true
+          git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
+          git push -f origin --delete ${{ env.UPDATE_BRANCH }} || true
+          git push -f origin --delete ${{ env.UPDATE_BRANCH_MERGED }} || true
+
+      - name: Non-Template - Prepare config for update_branch_merged
+        if: ${{ !matrix.is_target_a_template && steps.manage-branches.outputs.create_update_branch_merged_pr == 1 }}
+        # Parameter file name is unpredictable for security reasons
+        run: |
+          cat <<EOF > params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_${{ matrix.random_id }}.yml
+          - target: '${{ matrix.target }}'
+            origin_simplified_normalized_name: '${{ matrix.origin_simplified_normalized_name }}'
+            update_branch_merged_commit: '${{ steps.manage-branches.outputs.update_branch_merged_commit }}'
+          EOF
+
+      - name: Non-Template - Upload config for update_branch_merged
+        if: ${{ !matrix.is_target_a_template && steps.manage-branches.outputs.create_update_branch_merged_pr == 1 }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_${{ matrix.random_id }}
+          path: params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_${{ matrix.random_id }}.yml
+          retention-days: 5 # save storage
+          if-no-files-found: error
+
+  prepare-non-template-auto-merge:
+    needs: [prepare-and-find-repos, update]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix-include: ${{ steps.build-matrix.outputs.matrix-include }}
+      should-run: ${{ steps.build-matrix.outputs.should-run }}
+    steps:
+      - name: Download artifacts of matrix jobs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*
+          merge-multiple: true
+
+      - name: Build matrix
+        id: build-matrix
+        run: |
+          if ! ls params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*.yml 1> /dev/null 2>&1; then
+            echo "Wil not run"
+            echo "matrix-include=[{\"target\":\"skip\",\"origin_simplified_normalized_name\": \"-\",\"update_branch_merged_commit\": \"-\"}]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          cat params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*.yml > all_params.yml
+          cat all_params.yml
+          echo "should-run=1" >> $GITHUB_OUTPUT
+          echo "matrix-include=$(yq -p yaml -o json all_params.yml | jq -c)" >> $GITHUB_OUTPUT
+
+  non-template-auto-merge:
+    needs: prepare-non-template-auto-merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ needs.prepare-non-template-auto-merge.outputs.should-run }}
+    strategy:
+      fail-fast: false
+      # Workaround using fromJSON because number(input) is not a number(in yaml below) but a string!
+      # https://github.com/orgs/community/discussions/67182
+      max-parallel: ${{ inputs.max-parallel && fromJSON(inputs.max-parallel) || 1 }}
+      matrix:
+        include: ${{ fromJSON(needs.prepare-non-template-auto-merge.outputs.matrix-include) }}
+    name: non-template-auto-merge (${{ matrix.target }} <- ${{ matrix.origin_simplified_normalized_name }}@${{ matrix.update_branch_merged_commit }})
+    env:
+      UPDATE_BRANCH: ${{ format('update-from-template-{0}', matrix.origin_simplified_normalized_name) }}
+      UPDATE_BRANCH_MERGED: ${{ format('update-from-template-{0}-merged', matrix.origin_simplified_normalized_name) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Required because otherwise there are always changes detected when executing diff/rev-list
+          fetch-depth: 0
+          # If no PAT is used the following error occurs on a push:
+          # refusing to allow a GitHub App to create or update workflow `.github/workflows/xxx.yml` without `workflows` permission
+          token: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+          repository: ${{ matrix.target }}
+
+      - name: Init Git
+        run: |
+          git config --global user.email "111048771+xdev-gh-bot@users.noreply.github.com"
+          git config --global user.name "XDEV Bot"
+
+      - name: Checking if auto-merge for PR update_branch_merged can be done
+        id: auto-merge-check
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}
+        run: |
+          not_failed_conclusion="skipped|neutral|success"
+          not_relevant_app_slug="dependabot|github-pages"
+
+          echo "Waiting for checks to start..."
+          sleep 10s
+
+          for i in {1..20}; do
+            echo "Checking if PR can be auto-merged. Try: $i"
+
+            echo "Checking if update-branch-merged exists"
+            git fetch
+            if [[ $(git ls-remote --heads origin refs/heads/${{ env.UPDATE_BRANCH_MERGED }}) ]]; then
+              echo "Branch still exists; Continuing..."
+            else
+              echo "Branch origin/${{ env.UPDATE_BRANCH_MERGED }} is missing"
+              exit 0
+            fi
+
+            echo "Fetching checks"
+            cs_response=$(curl -sL \
+              --fail-with-body \
+              --connect-timeout 60 \
+              --max-time 120 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{ matrix.target }}/commits/${{ matrix.update_branch_merged_commit }}/check-suites)
+            
+            cs_data=$(echo $cs_response | jq '.check_suites[] | { conclusion: .conclusion, slug: .app.slug, check_runs_url: .check_runs_url }')
+            echo $cs_data
+
+            if [[ -z "$cs_data" ]]; then
+              echo "No check suite data - Assuming that there are no checks to run"
+
+              echo "perform=1" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            cs_failed=$(echo $cs_data | jq --arg x "$not_failed_conclusion" 'select ((.conclusion == null or (.conclusion | test($x))) | not)')
+            if [[ -z "$cs_failed" ]]; then
+              echo "No check failed so far; Checking if relevant checks are still running"
+
+              cs_relevant_still_running=$(echo $cs_data | jq --arg x "$not_relevant_app_slug" 'select (.conclusion == null and (.slug | test($x) | not))')
+              if [[ -z $cs_relevant_still_running ]]; then
+                echo "All relevant checks finished - PR can be merged"
+
+                echo "perform=1" >> $GITHUB_OUTPUT
+                exit 0
+              else
+                echo "Relevant checks are still running"
+                echo $cs_relevant_still_running
+              fi
+            else
+              echo "Detected failed check"
+              echo $cs_failed
+
+              echo "perform=0" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            echo "Waiting before next run..."
+            sleep 30s
+          done
+
+          echo "Timed out - Assuming executor starvation - Forcing merge"
+          echo "perform=1" >> $GITHUB_OUTPUT
+      
+      - name: Auto-merge update_branch_merged
+        if: steps.auto-merge-check.outputs.perform == 1
+        run: |
+          echo "Getting base branch"
+          base_branch=$(git branch --show-current)
+          echo "Base branch is $base_branch"
+
+          echo "Fetching..."
+          git fetch
+          if git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }} 1> /dev/null 2>&1; then
+            echo "Branch still exists; Continuing..."
+          else
+            echo "Branch origin/${{ env.UPDATE_BRANCH_MERGED }} is missing"
+            exit 0
+          fi
+
+          expected_commit="${{ matrix.update_branch_merged_commit }}"
+          actual_commit=$(git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }})
+          if [[ "$expected_commit" != "$actual_commit" ]]; then
+            echo "Branch ${{ env.UPDATE_BRANCH_MERGED }} contains unexpected commit $actual_commit"
+            echo "Expected: $expected_commit"
+
+            exit 0
+          fi
+
+          echo "Ensuring that current branch $base_branch is up-to-date"
+          git pull
+
+          echo "Merging origin/${{ env.UPDATE_BRANCH_MERGED }} into $base_branch"
+          git merge origin/${{ env.UPDATE_BRANCH_MERGED }} && merge_exit_code=$? || merge_exit_code=$?
+          if [ $merge_exit_code -ne 0 ]; then
+            echo "Unexpected merge failure $merge_exit_code - Requires manual resolution"
+
+            exit 0
+          fi
+
+          if [[ "${{ inputs.no_automatic_merge }}" == "true" ]]; then
+            echo "Exiting due to no_automatic_merge"
+
+            exit 0
+          fi
+
+          echo "Pushing"
+          git push
+
+          echo "Cleaning up"
+          git branch -D ${{ env.UPDATE_BRANCH }} || true
+          git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
+          git push -f origin --delete ${{ env.UPDATE_BRANCH }} || true
+          git push -f origin --delete ${{ env.UPDATE_BRANCH_MERGED }} || true
