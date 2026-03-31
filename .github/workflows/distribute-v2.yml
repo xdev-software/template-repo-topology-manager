@@ -268,10 +268,12 @@ jobs:
 
           if [[ "${{ matrix.is_target_a_template }}" == false ]]; then
             echo "Post processing: Trying to automatically fill in template variables"
+            TARGET_REPO="${{ matrix.target }}"
             find . -type f \
               -not -path "./.git/**" \
-              -not -path "./.github/workflows/update-from-template.yml" -print0 \
-              | xargs -0 sed -i "s/template-placeholder/${GITHUB_REPOSITORY#*/}/g"
+              -not -path "./.github/workflows/update*.yml" \
+              -not -path "./.github/workflows/distribute*.yml" -print0 \
+              | xargs -0 sed -i "s/template-placeholder/${TARGET_REPO#*/}/g"
 
             git status
             git add --all
