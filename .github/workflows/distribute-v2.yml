@@ -401,7 +401,7 @@ jobs:
         run: |
           if ! ls params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*.yml 1> /dev/null 2>&1; then
             echo "Wil not run"
-            echo "matrix-include=[{\"dummy\":\"dummy\"}]" >> $GITHUB_OUTPUT
+            echo "matrix-include=[{\"target\":\"skip\",\"origin_simplified_normalized_name\": \"-\",\"update_branch_merged_commit\": \"-\"}]" >> $GITHUB_OUTPUT
             exit 0
           fi
 
