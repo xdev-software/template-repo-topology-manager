@@ -318,6 +318,12 @@ jobs:
 
           echo "Fetching..."
           git fetch
+          if git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }} 1> /dev/null 2>&1; then
+            echo "Branch still exists; Continuing..."
+          else
+            echo "Branch origin/${{ env.UPDATE_BRANCH_MERGED }} is missing"
+            exit 0
+          fi
 
           expected_commit="${{ steps.manage-branches.outputs.update_branch_merged_commit }}"
           actual_commit=$(git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }})
@@ -331,8 +337,8 @@ jobs:
           echo "Ensuring that current branch $base_branch is up-to-date"
           git pull
 
-          echo "Merging ${{ env.UPDATE_BRANCH_MERGED }} into $base_branch"
-          git merge ${{ env.UPDATE_BRANCH_MERGED }} && merge_exit_code=$? || merge_exit_code=$?
+          echo "Merging origin/${{ env.UPDATE_BRANCH_MERGED }} into $base_branch"
+          git merge origin/${{ env.UPDATE_BRANCH_MERGED }} && merge_exit_code=$? || merge_exit_code=$?
           if [ $merge_exit_code -ne 0 ]; then
             echo "Unexpected merge failure $merge_exit_code - Requires manual resolution"
 
@@ -513,7 +519,7 @@ jobs:
 
           echo "Fetching..."
           git fetch
-          if [[ $(git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }}) ]]; then
+          if git rev-parse origin/${{ env.UPDATE_BRANCH_MERGED }} 1> /dev/null 2>&1; then
             echo "Branch still exists; Continuing..."
           else
             echo "Branch origin/${{ env.UPDATE_BRANCH_MERGED }} is missing"
@@ -541,7 +547,7 @@ jobs:
           fi
 
           if [[ "${{ inputs.no_automatic_merge }}" == "true" ]]; then
-            echo "Exiting due no_automatic_merge"
+            echo "Exiting due to no_automatic_merge"
 
             exit 0
           fi
