@@ -53,7 +53,6 @@ jobs:
           declare -A FULL_URL_ALL_REPO_DATAS
 
           while read REPO; do
-            echo ""
             if [ "$HAS_EXACT_REPOS" = true ] && ! printf '%s\0' "${EXACT_REPOS[@]}" | grep -Fxqz -- "$REPO"; then
               echo "Skipping $REPO"
               continue;
@@ -109,11 +108,9 @@ jobs:
 
           done < found-repos.txt
 
-          echo ""
           echo "Topo data:"
           echo "${TOPO_DATAS[@]}"
 
-          echo ""
           echo "Calculating topology: Doing topological sort"
           ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
           echo "${ALL_URLS_SORTED[@]}"
@@ -404,14 +401,13 @@ jobs:
         run: |
           if ! ls params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*.yml 1> /dev/null 2>&1; then
             echo "Wil not run"
-            echo "should-run=false" >> $GITHUB_OUTPUT
             echo "matrix-include=[{\"dummy\":\"dummy\"}]" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           cat params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*.yml > all_params.yml
           cat all_params.yml
-          echo "should-run=true" >> $GITHUB_OUTPUT
+          echo "should-run=1" >> $GITHUB_OUTPUT
           echo "matrix-include=$(yq -p yaml -o json all_params.yml | jq -c)" >> $GITHUB_OUTPUT
 
   non-template-auto-merge:
