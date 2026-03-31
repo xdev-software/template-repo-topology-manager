@@ -1,5 +1,21 @@
 name: Distribute
 
+# This workflow keeps the repos up to date with changes from the template repo(s)
+# It creates a new branch/PR and can also automatically merge the created PRs if 
+# there are no conflicts and all checks succeed.
+#
+# Note that this requires a PAT (Personal Access Token) - at best from a servicing account
+# PAT permissions: read:discussion, read:org, repo, workflow
+# 
+# Also note that you should have at least once merge the template repo into the current repo manually
+# otherwise a "refusing to merge unrelated histories" error might occur.
+# 
+# History:
+# This is workflow succeeds 
+# * Update from Template (in the repositories themselves)
+# * Distribute Templates
+# it was created due to security concerns (keeping a write PAT for each individual repository is too risky)
+
 on:
   workflow_dispatch:
     inputs:
