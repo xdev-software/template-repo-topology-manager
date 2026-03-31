@@ -17,6 +17,8 @@ name: Distribute
 # it was created due to security concerns (keeping a write PAT for each individual repository is too risky)
 
 on:
+  schedule:
+    - cron: '14 22 * * *'
   workflow_dispatch:
     inputs:
       no_automatic_merge:
