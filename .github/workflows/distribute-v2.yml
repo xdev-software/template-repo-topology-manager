@@ -53,6 +53,7 @@ jobs:
           declare -A FULL_URL_ALL_REPO_DATAS
 
           while read REPO; do
+            echo ""
             if [ "$HAS_EXACT_REPOS" = true ] && ! printf '%s\0' "${EXACT_REPOS[@]}" | grep -Fxqz -- "$REPO"; then
               echo "Skipping $REPO"
               continue;
@@ -108,8 +109,12 @@ jobs:
 
           done < found-repos.txt
 
+          echo ""
+          echo "Topo data:"
           echo "${TOPO_DATAS[@]}"
-          echo "Doing topological sort"
+
+          echo ""
+          echo "Calculating topology: Doing topological sort"
           ALL_URLS_SORTED=$(echo "${TOPO_DATAS[@]}" | tsort)
           echo "${ALL_URLS_SORTED[@]}"
           
