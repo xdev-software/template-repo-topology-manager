@@ -411,7 +411,7 @@ jobs:
       should-run: ${{ steps.build-matrix.outputs.should-run }}
     steps:
       - name: Download artifacts of matrix jobs
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*
           merge-multiple: true
