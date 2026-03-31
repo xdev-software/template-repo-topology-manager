@@ -400,7 +400,7 @@ jobs:
           if ! ls params_${{ github.run_id }}_${{ needs.prepare-and-find-repos.outputs.run-instance-id }}_*.yml 1> /dev/null 2>&1; then
             echo "Wil not run"
             echo "should-run=false" >> $GITHUB_OUTPUT
-            echo "matrix-include=[{\"dummy\":\"dummy\"}}]" >> $GITHUB_OUTPUT
+            echo "matrix-include=[{\"dummy\":\"dummy\"}]" >> $GITHUB_OUTPUT
             exit 0
           fi
 
