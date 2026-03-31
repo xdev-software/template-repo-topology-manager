@@ -164,6 +164,7 @@ jobs:
       max-parallel: ${{ inputs.max-parallel && fromJSON(inputs.max-parallel) || 1 }}
       matrix: 
         include: ${{ fromJSON(needs.prepare-and-find-repos.outputs.matrix-include) }}
+    name: update (${{ matrix.target }} <- ${{ matrix.origin_url }}@${{ matrix.origin_branch }})
     env:
       UPDATE_BRANCH: ${{ format('update-from-template-{0}', matrix.origin_simplified_normalized_name) }}
       UPDATE_BRANCH_MERGED: ${{ format('update-from-template-{0}-merged', matrix.origin_simplified_normalized_name) }}
@@ -420,6 +421,7 @@ jobs:
       max-parallel: ${{ inputs.max-parallel && fromJSON(inputs.max-parallel) || 1 }}
       matrix:
         include: ${{ fromJSON(needs.prepare-non-template-auto-merge.outputs.matrix-include) }}
+    name: non-template-auto-merge (${{ matrix.target }} <- ${{ matrix.origin_simplified_normalized_name }}@${{ matrix.update_branch_merged_commit }})
     env:
       UPDATE_BRANCH: ${{ format('update-from-template-{0}', matrix.origin_simplified_normalized_name) }}
       UPDATE_BRANCH_MERGED: ${{ format('update-from-template-{0}-merged', matrix.origin_simplified_normalized_name) }}
