@@ -60,6 +60,7 @@ jobs:
           # TODO increase to 100
           MAX_PER_PAGE=20
           for PAGE_NUM in {1..20}; do
+            echo "Page: ${PAGE_NUM}"
             REPO_DATA=$(curl --fail -s -L \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
@@ -70,6 +71,7 @@ jobs:
             echo "Current item count: ${CURRENT_ITEM_COUNT}"
 
             if [ "$CURRENT_ITEM_COUNT" -lt "1" ]; then
+              echo "No items - breaking"
               break;
             fi
 
@@ -78,6 +80,7 @@ jobs:
               | tee -a found-repos.txt
             
             if [ "$CURRENT_ITEM_COUNT" -lt "$MAX_PER_PAGE" ]; then
+              echo "Current item count is less than max - breaking"
               break;
             fi
           done
