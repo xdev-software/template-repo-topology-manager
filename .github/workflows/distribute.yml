@@ -215,11 +215,6 @@ jobs:
           echo "Deleting local branches that will contain the updates - if present"
           git branch -D ${{ env.UPDATE_BRANCH }} || true
           git branch -D ${{ env.UPDATE_BRANCH_MERGED }} || true
-
-          git branch -D update-from-template || true
-          git branch -D update-from-template-merged || true
-          git push -f origin --delete update-from-template || true
-          git push -f origin --delete update-from-template-merged || true
           
           echo "Checking if the remote template repo has new commits"
           git rev-list ..template/${{ matrix.origin_branch }}
