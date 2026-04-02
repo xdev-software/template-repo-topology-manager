@@ -57,8 +57,7 @@ jobs:
             IFS=',' read -ra EXACT_REPOS <<< "${{ inputs.repositories }}"
           fi
 
-          # TODO increase to 100
-          MAX_PER_PAGE=20
+          MAX_PER_PAGE=100
           for PAGE_NUM in {1..20}; do
             echo "Page: ${PAGE_NUM}"
             REPO_DATA=$(curl --fail -s -L \
