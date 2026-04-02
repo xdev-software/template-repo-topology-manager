@@ -65,7 +65,7 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
               -H "X-GitHub-Api-Version: 2026-03-10" \
-              https://api.github.com/user/repos?visibility=public&per_page=${MAX_PER_PAGE}&page=${PAGE_NUM} || echo "[]")
+              "https://api.github.com/user/repos?visibility=public&per_page=${MAX_PER_PAGE}&page=${PAGE_NUM}" || echo "[]")
             
             CURRENT_ITEM_COUNT=$(echo "$REPO_DATA" | jq length)
             echo "Current item count: ${CURRENT_ITEM_COUNT}"
