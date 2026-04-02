@@ -57,15 +57,31 @@ jobs:
             IFS=',' read -ra EXACT_REPOS <<< "${{ inputs.repositories }}"
           fi
 
-          echo "${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" | gh auth login --with-token
+          # TODO increase to 100
+          MAX_PER_PAGE=20
+          for PAGE_NUM in {1..20}; do
+            REPO_DATA=$(curl --fail -s -L \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.UPDATE_FROM_TEMPLATE_PAT }}" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              https://api.github.com/user/repos?visibility=public&per_page=${MAX_PER_PAGE}&page=${PAGE_NUM} || echo "[]")
+            
+            CURRENT_ITEM_COUNT=$(echo "$REPO_DATA" | jq length)
+            echo "Current item count: ${CURRENT_ITEM_COUNT}"
 
-          declare -a ORGS=("xdev-software")
+            if [ "$CURRENT_ITEM_COUNT" -lt "1" ]; then
+              break;
+            fi
 
-          for ORG in "${ORGS[@]}"
-          do
-            echo "Getting repos for $ORG"
-            gh repo list --no-archived -L 1000 $ORG --json nameWithOwner --jq '.[].nameWithOwner' >> found-repos.txt
+            echo "$REPO_DATA" \
+              | jq -r -c '.[] | select(.archived == false and .disabled == false and .permissions.push == true and .owner.login == "xdev-software") | .full_name' \
+              | tee -a found-repos.txt
+            
+            if [ "$CURRENT_ITEM_COUNT" -lt "$MAX_PER_PAGE" ]; then
+              break;
+            fi
           done
+
           
           TOPO_DATAS=()
           declare -A FULL_URL_ALL_REPO_DATAS
