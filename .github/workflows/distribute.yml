@@ -58,7 +58,7 @@ jobs:
           fi
 
           # Separated by |
-          ALLOWED_OWNERS="xdev-software"
+          ALLOWED_OWNERS="^xdev-software$"
 
           MAX_PER_PAGE=100
           for PAGE_NUM in {1..20}; do
